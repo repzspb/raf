@@ -1,0 +1,11 @@
+.idea/
+.DS_Store
+
+# Local configuration and build output.
+.env
+.env.*
+!.env.example
+/raf
+*.test
+*.out
+coverage.out
