@@ -3,5 +3,34 @@
     "name": "raf",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "item": []
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "topic", "value": "example.events" },
+    { "key": "message_type", "value": "example.Event" },
+    { "key": "message_key", "value": "example-1" }
+  ],
+  "item": [
+    {
+      "name": "Publish Protobuf message",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Raf-Headers", "value": "{\"id\":\"manual-test-1\"}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"example-1\",\n  \"status\": \"CREATED\"\n}"
+        },
+        "url": "{{base_url}}/topics/{{topic}}/messages?type={{message_type}}&key={{message_key}}"
+      }
+    },
+    {
+      "name": "Inspect recent messages",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/topics/{{topic}}/messages?type={{message_type}}&limit=10"
+      }
+    }
+  ]
 }

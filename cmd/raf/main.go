@@ -1,7 +1,11 @@
 package main
 
-import "log"
+import "os"
 
 func main() {
-	log.Fatal("raf: HTTP server is not implemented yet")
+	logger := newLogger()
+	if err := run(logger); err != nil {
+		logger.Error("raf stopped", "error", err)
+		os.Exit(1)
+	}
 }
