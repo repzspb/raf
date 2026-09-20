@@ -93,12 +93,15 @@ func (h *Handler) writeServiceError(
 ) {
 	var typeError *usecase.TypeError
 	var validationError *usecase.ValidationError
+	var notFound *usecase.NotFoundError
 	// timeout распознаёт ошибки таймаута без зависимости от библиотеки брокера.
 	var timeout interface {
 		// Timeout сообщает, вызвана ли ошибка истечением времени ожидания.
 		Timeout() bool
 	}
 	switch {
+	case errors.As(err, &notFound):
+		writeError(w, http.StatusNotFound, err)
 	case errors.As(err, &typeError):
 		if typeError.Name == "" {
 			err = fmt.Errorf("query parameter type is required; configure RAF_TOPIC_TYPES for a default or see GET /types for loaded types")

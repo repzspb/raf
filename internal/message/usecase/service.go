@@ -14,6 +14,8 @@ type Service struct {
 	publisher Publisher
 	// reader читает последние доступные записи без изменения позиции потребителей.
 	reader Reader
+	// catalog читает метаданные топиков и границы партиций.
+	catalog TopicCatalog
 	// codec проверяет контракты и преобразует тела сообщений между JSON и бинарным форматом.
 	codec Codec
 	// topicTypes хранит копию настроек типов по умолчанию для каждого топика.
@@ -23,6 +25,7 @@ type Service struct {
 func New(
 	publisher Publisher,
 	reader Reader,
+	catalog TopicCatalog,
 	codec Codec,
 	topicTypes map[string]string,
 ) (*Service, error) {
@@ -34,6 +37,7 @@ func New(
 	return &Service{
 		publisher:  publisher,
 		reader:     reader,
+		catalog:    catalog,
 		codec:      codec,
 		topicTypes: maps.Clone(topicTypes),
 	}, nil

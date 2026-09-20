@@ -126,7 +126,7 @@ func TestPublishResolvesTypeAndPreservesMessage(t *testing.T) {
 				}
 				return position, nil
 			}}
-			service, err := usecase.New(broker, broker, codec, mappings)
+			service, err := usecase.New(broker, broker, nil, codec, mappings)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +154,7 @@ func TestInvalidInputNeverReachesBroker(t *testing.T) {
 		return nil, errors.New("invalid JSON")
 	}}
 	// Пустые функции брокера обнаружат любой ошибочный вызов после неудачной проверки.
-	service, err := usecase.New(brokerStub{}, brokerStub{}, codec, nil)
+	service, err := usecase.New(brokerStub{}, brokerStub{}, nil, codec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestInspectPreservesTombstonesAndDecodeFailures(t *testing.T) {
 		}
 		return []byte("{}"), nil
 	}}
-	service, err := usecase.New(broker, broker, codec, map[string]string{"events": "example.Event"})
+	service, err := usecase.New(broker, broker, nil, codec, map[string]string{"events": "example.Event"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestCancellationReachesBroker(t *testing.T) {
 			) ([]byte, error) {
 				return []byte{}, nil
 			}}
-			service, err := usecase.New(broker, broker, codec, map[string]string{"events": "example.Event"})
+			service, err := usecase.New(broker, broker, nil, codec, map[string]string{"events": "example.Event"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -322,11 +322,11 @@ func TestCancellationReachesBroker(t *testing.T) {
 }
 
 func TestMappingsAndTypeDiscovery(t *testing.T) {
-	_, err := usecase.New(brokerStub{}, brokerStub{}, codecStub{}, map[string]string{"events": "unknown.Type"})
+	_, err := usecase.New(brokerStub{}, brokerStub{}, nil, codecStub{}, map[string]string{"events": "unknown.Type"})
 	if err == nil {
 		t.Fatal("invalid mapping accepted")
 	}
-	service, err := usecase.New(brokerStub{}, brokerStub{}, codecStub{}, nil)
+	service, err := usecase.New(brokerStub{}, brokerStub{}, nil, codecStub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

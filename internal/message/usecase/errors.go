@@ -1,5 +1,14 @@
 package usecase
 
+// NotFoundError означает, что запрошенный ресурс отсутствует в брокере.
+type NotFoundError struct {
+	// Err — исходная причина отсутствия ресурса.
+	Err error
+}
+
+func (e *NotFoundError) Error() string { return e.Err.Error() }
+func (e *NotFoundError) Unwrap() error { return e.Err }
+
 // ValidationError означает, что входные данные не позволяют выполнить сценарий.
 type ValidationError struct {
 	// Err — причина, по которой входные данные не прошли проверку.

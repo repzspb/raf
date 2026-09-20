@@ -6,6 +6,18 @@ import (
 	"github.com/repzspb/raf/internal/message/model"
 )
 
+// TopicCatalog предоставляет сведения о существующих топиках брокера.
+type TopicCatalog interface {
+	// ListTopics возвращает доступные топики без чтения сообщений и диапазонов offset.
+	ListTopics(ctx context.Context) ([]model.TopicSummary, error)
+
+	// DescribeTopic возвращает партиции и их текущие границы; отсутствующий топик даёт NotFoundError.
+	DescribeTopic(
+		ctx context.Context,
+		name string,
+	) (model.Topic, error)
+}
+
 // Publisher записывает бинарные сообщения в брокер.
 type Publisher interface {
 	// Publish ожидает подтверждения записи и возвращает её позицию.

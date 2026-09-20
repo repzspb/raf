@@ -12,6 +12,20 @@
   ],
   "item": [
     {
+      "name": "List Kafka topics",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/topics"
+      }
+    },
+    {
+      "name": "Inspect topic settings and partitions",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/topics/{{topic}}"
+      }
+    },
+    {
       "name": "Generate Protobuf JSON example",
       "request": {
         "method": "GET",

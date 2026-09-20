@@ -81,6 +81,26 @@ func TestIntegrationKafka(t *testing.T) {
 		t.Fatal(err)
 	}
 	baseTime := time.Now().UTC().Truncate(time.Millisecond)
+	topics, err := c.ListTopics(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundTopic := false
+	for _, item := range topics {
+		foundTopic = foundTopic || item.Name == topic
+	}
+	if !foundTopic {
+		t.Fatal("created topic is missing from catalog")
+	}
+	description, err := c.DescribeTopic(ctx, topic)
+	if err != nil || len(description.Partitions) != 3 {
+		t.Fatalf("describe new topic: %+v, %v", description, err)
+	}
+	for _, partition := range description.Partitions {
+		if partition.FirstOffset != partition.EndOffset {
+			t.Fatalf("new partition is not empty: %+v", partition)
+		}
+	}
 	// Сжатые пакеты заставляют Fetch вернуть записи до запрошенного offset.
 	// Партиция 2 остаётся пустой при первом чтении.
 	for partition := 0; partition < 2; partition++ {
@@ -202,6 +222,16 @@ func TestIntegrationKafka(t *testing.T) {
 	}
 	if len(messages) != 20 {
 		t.Fatalf("got %d records, want 20", len(messages))
+	}
+	description, err = c.DescribeTopic(ctx, topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range messages {
+		bounds := description.Partitions[message.Partition]
+		if message.Offset < bounds.FirstOffset || message.Offset >= bounds.EndOffset {
+			t.Fatalf("message outside catalog bounds: %+v, %+v", message, bounds)
+		}
 	}
 	for _, message := range messages {
 		if message.Partition != 2 {

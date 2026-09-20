@@ -11,6 +11,15 @@ import (
 
 // Service описывает сценарии, доступные через HTTP.
 type Service interface {
+	// ListTopics возвращает топики брокера с настроенными в raf типами.
+	ListTopics(ctx context.Context) ([]usecase.TopicSummary, error)
+
+	// DescribeTopic возвращает настройки raf и границы партиций указанного топика.
+	DescribeTopic(
+		ctx context.Context,
+		name string,
+	) (usecase.TopicDetails, error)
+
 	// Example возвращает готовое JSON-тело для публикации сообщения указанного типа.
 	Example(
 		ctx context.Context,
@@ -62,5 +71,7 @@ func New(
 	mux.HandleFunc("GET /topics/{topic}/messages", handler.inspect)
 	mux.HandleFunc("GET /types", handler.types)
 	mux.HandleFunc("GET /types/{type}/example", handler.example)
+	mux.HandleFunc("GET /topics", handler.topics)
+	mux.HandleFunc("GET /topics/{topic}", handler.topic)
 	return mux
 }

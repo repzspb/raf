@@ -27,6 +27,17 @@ type serviceStub struct {
 	) ([]usecase.InspectedMessage, error)
 }
 
+func (s serviceStub) ListTopics(ctx context.Context) ([]usecase.TopicSummary, error) {
+	return nil, nil
+}
+
+func (s serviceStub) DescribeTopic(
+	ctx context.Context,
+	name string,
+) (usecase.TopicDetails, error) {
+	return usecase.TopicDetails{}, nil
+}
+
 func (s serviceStub) Example(
 	ctx context.Context,
 	name string,

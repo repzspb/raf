@@ -50,7 +50,7 @@ func New(
 		return nil, err
 	}
 	broker := kafka.New(cfg.KafkaBrokers)
-	service, err := usecase.New(broker, broker, codec, cfg.TopicTypes)
+	service, err := usecase.New(broker, broker, broker, codec, cfg.TopicTypes)
 	if err != nil {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

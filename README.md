@@ -103,6 +103,19 @@ The Kafka topic must already exist; `raf` does not create topics automatically.
 
 ## Inspect recent messages
 
+### Browse topics
+
+```sh
+curl http://localhost:8080/topics
+curl http://localhost:8080/topics/example.events
+```
+
+`GET /topics` lists existing Kafka topics by name, including internal topics. Each entry contains `name`, `internal`, and `type` (the configured raf default, or `null`). Configured names that do not exist in Kafka are not added to this list.
+
+`GET /topics/{topic}` adds `partitions`, sorted by `id`, with `first_offset` and `end_offset`. The range is `[first_offset, end_offset)`; equal bounds mean an empty range. The difference is not a message count because compaction can leave gaps. Partitions are observed independently. These endpoints read metadata, never join a consumer group, and do not create topics. A missing topic returns HTTP 404; broker timeouts return 504 and other broker failures return 502. The type describes raf configuration, not a type inferred from Kafka records.
+
+### Read messages
+
 ```sh
 curl 'http://localhost:8080/topics/example.events/messages?type=example.Event&limit=10'
 ```

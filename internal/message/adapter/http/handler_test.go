@@ -21,6 +21,10 @@ import (
 
 // fakeBroker хранит записи в памяти для проверки HTTP вместе со сценариями и кодеком.
 type fakeBroker struct {
+	// topics задаёт список доступных топиков.
+	topics []model.TopicSummary
+	// topic задаёт описание одного топика.
+	topic model.Topic
 	// message хранит последнюю опубликованную запись.
 	message model.Message
 	// messages задаёт результат чтения; при nil возвращается message.
@@ -31,6 +35,17 @@ type fakeBroker struct {
 	publishCalls int
 	// recentCalls считает обращения к чтению.
 	recentCalls int
+}
+
+func (b *fakeBroker) ListTopics(ctx context.Context) ([]model.TopicSummary, error) {
+	return b.topics, b.err
+}
+
+func (b *fakeBroker) DescribeTopic(
+	ctx context.Context,
+	name string,
+) (model.Topic, error) {
+	return b.topic, b.err
 }
 
 func (b *fakeBroker) Publish(
@@ -78,7 +93,7 @@ func TestPublishAndInspectProtobuf(t *testing.T) {
 		t.Fatal(err)
 	}
 	broker := new(fakeBroker)
-	service, err := usecase.New(broker, broker, codec, nil)
+	service, err := usecase.New(broker, broker, broker, codec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +189,7 @@ func testServer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := usecase.New(broker, broker, codec, mappings)
+	service, err := usecase.New(broker, broker, broker, codec, mappings)
 	if err != nil {
 		t.Fatal(err)
 	}
