@@ -74,6 +74,20 @@ The list is sorted and includes nested and imported message types, excluding syn
 
 ## Publish
 
+### Generate an example
+
+`GET /types/{type}/example` returns a ProtoJSON body ready to paste into a publish request:
+
+```sh
+curl http://localhost:8080/types/example.Event/example
+```
+
+The generator fills scalar and nested fields, one element of each list and map, and the first expandable alternative of each `oneof`. Enums use their first declared value. Timestamps, durations, bytes, and 64-bit numbers follow ProtoJSON rules. Values are placeholders: replace IDs and other business data before sending.
+
+Optional recursive branches and nesting beyond eight message levels are omitted. Required fields that cannot be generated and examples exceeding 2,048 visited fields return HTTP 400. `Any` is generated as `{}`, because the contract does not specify its payload type. Generating an example does not contact Kafka.
+
+### Send a message
+
 Use the fully qualified Protobuf message name in `type`. The HTTP body follows the [ProtoJSON mapping](https://protobuf.dev/programming-guides/json/), including its rules for timestamps, enums, and 64-bit integers. Unknown fields and invalid values return HTTP 400.
 
 ```sh

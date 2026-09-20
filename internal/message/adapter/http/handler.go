@@ -11,6 +11,12 @@ import (
 
 // Service описывает сценарии, доступные через HTTP.
 type Service interface {
+	// Example возвращает готовое JSON-тело для публикации сообщения указанного типа.
+	Example(
+		ctx context.Context,
+		name string,
+	) ([]byte, error)
+
 	// Publish выбирает контракт, кодирует JSON и возвращает подтверждённую позицию записи.
 	// Явный тип в input имеет приоритет над настройкой топика.
 	Publish(
@@ -55,5 +61,6 @@ func New(
 	mux.HandleFunc("POST /topics/{topic}/messages", handler.publish)
 	mux.HandleFunc("GET /topics/{topic}/messages", handler.inspect)
 	mux.HandleFunc("GET /types", handler.types)
+	mux.HandleFunc("GET /types/{type}/example", handler.example)
 	return mux
 }

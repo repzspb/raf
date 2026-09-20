@@ -55,6 +55,13 @@ type codecStub struct {
 	) ([]byte, error)
 }
 
+func (c codecStub) Example(
+	ctx context.Context,
+	name string,
+) ([]byte, error) {
+	return []byte("{}"), nil
+}
+
 func (c codecStub) ValidateType(name string) error {
 	if name == "example.Event" || name == "example.Other" {
 		return nil

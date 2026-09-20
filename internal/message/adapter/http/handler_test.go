@@ -124,6 +124,28 @@ func TestPublishAndInspectProtobuf(t *testing.T) {
 	assertJSONEqual(t, result.Messages[0].Value, decoded)
 }
 
+func TestExampleCanBePublished(t *testing.T) {
+	broker := new(fakeBroker)
+	handler := testServer(t, broker, nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest("GET", "/types/example.Event/example", nil))
+	if response.Code != 200 || broker.publishCalls != 0 || broker.recentCalls != 0 {
+		t.Fatalf("example: status=%d body=%s", response.Code, response.Body)
+	}
+	request := httptest.NewRequest("POST", "/topics/events/messages?type=example.Event", strings.NewReader(response.Body.String()))
+	request.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != 201 {
+		t.Fatalf("publish example: status=%d body=%s", response.Code, response.Body)
+	}
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest("GET", "/types/missing.Type/example", nil))
+	if response.Code != 400 {
+		t.Fatalf("unknown type: status=%d body=%s", response.Code, response.Body)
+	}
+}
+
 func assertJSONEqual(
 	t *testing.T,
 	got []byte,

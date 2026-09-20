@@ -12,6 +12,13 @@
   ],
   "item": [
     {
+      "name": "Generate Protobuf JSON example",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/types/{{message_type}}/example"
+      }
+    },
+    {
       "name": "List loaded Protobuf types",
       "request": {
         "method": "GET",

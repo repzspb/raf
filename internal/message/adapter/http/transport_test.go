@@ -27,6 +27,13 @@ type serviceStub struct {
 	) ([]usecase.InspectedMessage, error)
 }
 
+func (s serviceStub) Example(
+	ctx context.Context,
+	name string,
+) ([]byte, error) {
+	return []byte("{}"), nil
+}
+
 func (s serviceStub) Publish(
 	ctx context.Context,
 	input usecase.PublishInput,
