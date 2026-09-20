@@ -14,31 +14,54 @@ import (
 	"testing"
 	"time"
 
-	"github.com/repzspb/raf/internal/protobuf"
-	kafkago "github.com/segmentio/kafka-go"
+	"github.com/repzspb/raf/internal/message/adapter/protobuf"
+	"github.com/repzspb/raf/internal/message/model"
+	"github.com/repzspb/raf/internal/message/usecase"
 )
 
+// fakeBroker хранит записи в памяти для проверки HTTP вместе со сценариями и кодеком.
 type fakeBroker struct {
-	message      kafkago.Message
-	messages     []kafkago.Message
-	err          error
+	// message хранит последнюю опубликованную запись.
+	message model.Message
+	// messages задаёт результат чтения; при nil возвращается message.
+	messages []model.Message
+	// err задаёт общую ошибку операций публикации и чтения.
+	err error
+	// publishCalls считает обращения к публикации.
 	publishCalls int
-	recentCalls  int
+	// recentCalls считает обращения к чтению.
+	recentCalls int
 }
 
-func (b *fakeBroker) Publish(_ context.Context, topic, key string, headers []kafkago.Header, value []byte) (kafkago.Message, error) {
+func (b *fakeBroker) Publish(
+	_ context.Context,
+	input model.Message,
+) (model.Position, error) {
 	b.publishCalls++
 	if b.err != nil {
-		return kafkago.Message{}, b.err
+		return model.Position{}, b.err
 	}
-	b.message = kafkago.Message{
-		Topic: topic, Partition: 2, Offset: 7, Time: time.Now(),
-		Key: []byte(key), Headers: headers, Value: value,
+	b.message = model.Message{
+		Topic:     input.Topic,
+		Partition: 2,
+		Offset:    7,
+		Time:      time.Now(),
+		Key:       input.Key,
+		Headers:   input.Headers,
+		Value:     input.Value,
 	}
-	return b.message, nil
+	return model.Position{
+		Topic:     b.message.Topic,
+		Partition: b.message.Partition,
+		Offset:    b.message.Offset,
+	}, nil
 }
 
-func (b *fakeBroker) Recent(_ context.Context, _ string, _ int) ([]kafkago.Message, error) {
+func (b *fakeBroker) Recent(
+	_ context.Context,
+	_ string,
+	_ int,
+) ([]model.Message, error) {
 	b.recentCalls++
 	if b.err != nil {
 		return nil, b.err
@@ -46,16 +69,20 @@ func (b *fakeBroker) Recent(_ context.Context, _ string, _ int) ([]kafkago.Messa
 	if b.messages != nil {
 		return b.messages, nil
 	}
-	return []kafkago.Message{b.message}, nil
+	return []model.Message{b.message}, nil
 }
 
 func TestPublishAndInspectProtobuf(t *testing.T) {
-	codec, err := protobuf.New(t.Context(), []string{"event.proto"}, []string{"../../examples/proto"})
+	codec, err := protobuf.New(t.Context(), []string{"event.proto"}, []string{"../../../../examples/proto"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	broker := new(fakeBroker)
-	handler := New(broker, codec, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	service, err := usecase.New(broker, broker, codec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(service, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	request := httptest.NewRequest(http.MethodPost,
 		"/topics/example.events/messages?type=example.Event&key=event-1",
 		bytes.NewBufferString(`{"id":"event-1","status":"CREATED"}`))
@@ -97,7 +124,11 @@ func TestPublishAndInspectProtobuf(t *testing.T) {
 	assertJSONEqual(t, result.Messages[0].Value, decoded)
 }
 
-func assertJSONEqual(t *testing.T, got, want []byte) {
+func assertJSONEqual(
+	t *testing.T,
+	got []byte,
+	want []byte,
+) {
 	t.Helper()
 	var actual, expected any
 	if err := json.Unmarshal(got, &actual); err != nil {
@@ -111,13 +142,21 @@ func assertJSONEqual(t *testing.T, got, want []byte) {
 	}
 }
 
-func testServer(t *testing.T, broker *fakeBroker, mappings map[string]string) http.Handler {
+func testServer(
+	t *testing.T,
+	broker *fakeBroker,
+	mappings map[string]string,
+) http.Handler {
 	t.Helper()
-	codec, err := protobuf.New(t.Context(), []string{"event.proto"}, []string{"../../examples/proto"})
+	codec, err := protobuf.New(t.Context(), []string{"event.proto"}, []string{"../../../../examples/proto"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(broker, codec, slog.New(slog.NewTextHandler(io.Discard, nil)), mappings)
+	service, err := usecase.New(broker, broker, codec, mappings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return New(service, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func TestInvalidRequestsNeverReachKafka(t *testing.T) {
@@ -186,10 +225,28 @@ func TestTypesAndTopicDefaults(t *testing.T) {
 }
 
 func TestInspectSpecialRecords(t *testing.T) {
-	broker := &fakeBroker{messages: []kafkago.Message{
-		{Offset: 0, Value: nil},
-		{Offset: 1, Key: []byte{}, Value: []byte{}},
-		{Offset: 2, Key: []byte{0xff}, Value: []byte{0xff}, Headers: []kafkago.Header{{Key: "binary", Value: []byte{0xff}}, {Key: "text", Value: []byte("base64:/w==")}}},
+	broker := &fakeBroker{messages: []model.Message{
+		{
+			Offset: 0,
+			Value:  nil,
+		},
+		{
+			Offset: 1,
+			Key:    []byte{},
+			Value:  []byte{},
+		},
+		{
+			Offset: 2,
+			Key:    []byte{0xff},
+			Value:  []byte{0xff},
+			Headers: []model.Header{{
+				Key:   "binary",
+				Value: []byte{0xff},
+			}, {
+				Key:   "text",
+				Value: []byte("base64:/w=="),
+			}},
+		},
 	}}
 	w := httptest.NewRecorder()
 	testServer(t, broker, nil).ServeHTTP(w, httptest.NewRequest("GET", "/topics/events/messages?type=example.Event", nil))
@@ -228,7 +285,7 @@ func TestBrokerErrors(t *testing.T) {
 			status int
 		}{
 			{"timeout", context.DeadlineExceeded, 504},
-			{"kafka timeout", kafkago.RequestTimedOut, 504},
+			{"kafka timeout", &usecase.TimeoutError{Err: errors.New("broker timeout")}, 504},
 			{"unavailable", errors.New("broker unavailable"), 502},
 		} {
 			t.Run(method+"/"+tt.name, func(t *testing.T) {

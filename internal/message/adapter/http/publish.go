@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,20 +8,18 @@ import (
 	"mime"
 	"net/http"
 	"sort"
-	"time"
 
-	kafkago "github.com/segmentio/kafka-go"
+	"github.com/repzspb/raf/internal/message/model"
+	"github.com/repzspb/raf/internal/message/usecase"
 )
 
 const maxBodyBytes = 1 << 20
 
-func (s *Server) publish(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) publish(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	topic := r.PathValue("topic")
-	messageType, err := s.messageType(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
 		writeError(w, http.StatusUnsupportedMediaType, fmt.Errorf("Content-Type must be application/json"))
@@ -38,31 +35,31 @@ func (s *Server) publish(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	encoded, err := s.codec.Encode(messageType, value)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
 	headers, err := requestHeaders(r.Header.Get("X-Raf-Headers"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-	message, err := s.broker.Publish(ctx, topic, r.URL.Query().Get("key"), headers, encoded)
+	message, err := h.service.Publish(r.Context(), usecase.PublishInput{
+		Topic:   topic,
+		Type:    r.URL.Query().Get("type"),
+		Key:     []byte(r.URL.Query().Get("key")),
+		Headers: headers,
+		JSON:    value,
+	})
 	if err != nil {
-		s.logger.Error("publish failed", "topic", topic, "error", err)
-		writeBrokerError(w, err)
+		h.writeServiceError(w, "publish failed", topic, err)
 		return
 	}
-	s.logger.Info("message published", "topic", topic, "partition", message.Partition, "offset", message.Offset)
+	h.logger.Info("message published", "topic", topic, "partition", message.Partition, "offset", message.Offset)
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"topic": topic, "partition": message.Partition, "offset": message.Offset,
+		"topic":     topic,
+		"partition": message.Partition,
+		"offset":    message.Offset,
 	})
 }
 
-func requestHeaders(raw string) ([]kafkago.Header, error) {
+func requestHeaders(raw string) ([]model.Header, error) {
 	if raw == "" {
 		return nil, nil
 	}
@@ -75,12 +72,15 @@ func requestHeaders(raw string) ([]kafkago.Header, error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	headers := make([]kafkago.Header, 0, len(names))
+	headers := make([]model.Header, 0, len(names))
 	for _, name := range names {
 		if values[name] == nil {
 			return nil, fmt.Errorf("X-Raf-Headers must be a JSON object of string values")
 		}
-		headers = append(headers, kafkago.Header{Key: name, Value: []byte(*values[name])})
+		headers = append(headers, model.Header{
+			Key:   name,
+			Value: []byte(*values[name]),
+		})
 	}
 	return headers, nil
 }

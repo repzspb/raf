@@ -10,13 +10,22 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 )
 
+// blockedWriter задерживает закрытие отправителя для проверки отмены ожидания.
 type blockedWriter struct {
+	// started сообщает тесту о входе в Close.
 	started chan struct{}
+	// release разрешает заблокированному Close завершиться.
 	release chan struct{}
-	calls   atomic.Int32
+	// calls считает вызовы Close, чтобы проверить однократность закрытия.
+	calls atomic.Int32
 }
 
-func (w *blockedWriter) WriteMessages(context.Context, ...kafkago.Message) error { return nil }
+func (w *blockedWriter) WriteMessages(
+	context.Context,
+	...kafkago.Message,
+) error {
+	return nil
+}
 func (w *blockedWriter) Close() error {
 	w.calls.Add(1)
 	close(w.started)
@@ -26,7 +35,10 @@ func (w *blockedWriter) Close() error {
 
 func TestCloseRespectsCancellationAndCanBeWaitedAgain(t *testing.T) {
 	c := New([]string{"unused:9092"})
-	w := &blockedWriter{started: make(chan struct{}), release: make(chan struct{})}
+	w := &blockedWriter{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
 	c.writer = w
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

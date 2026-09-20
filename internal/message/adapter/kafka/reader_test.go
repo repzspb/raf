@@ -14,45 +14,94 @@ import (
 	"github.com/segmentio/kafka-go/protocol"
 )
 
+// stubReader моделирует ответы Kafka для проверки алгоритма чтения без брокера.
 type stubReader struct {
-	metadata func(context.Context, *kafkago.MetadataRequest) (*kafkago.MetadataResponse, error)
-	offsets  func(context.Context, *kafkago.ListOffsetsRequest) (*kafkago.ListOffsetsResponse, error)
-	fetch    func(context.Context, *kafkago.FetchRequest) (*kafkago.FetchResponse, error)
+	// metadata задаёт сведения о топиках и партициях либо ошибку запроса.
+	metadata func(
+		context.Context,
+		*kafkago.MetadataRequest,
+	) (*kafkago.MetadataResponse, error)
+	// offsets задаёт границы партиций, в том числе их изменение во время чтения.
+	offsets func(
+		context.Context,
+		*kafkago.ListOffsetsRequest,
+	) (*kafkago.ListOffsetsResponse, error)
+	// fetch возвращает подготовленный пакет записей либо ошибку чтения.
+	fetch func(
+		context.Context,
+		*kafkago.FetchRequest,
+	) (*kafkago.FetchResponse, error)
 }
 
-func (s stubReader) Metadata(ctx context.Context, r *kafkago.MetadataRequest) (*kafkago.MetadataResponse, error) {
+func (s stubReader) Metadata(
+	ctx context.Context,
+	r *kafkago.MetadataRequest,
+) (*kafkago.MetadataResponse, error) {
 	return s.metadata(ctx, r)
 }
-func (s stubReader) ListOffsets(ctx context.Context, r *kafkago.ListOffsetsRequest) (*kafkago.ListOffsetsResponse, error) {
+func (s stubReader) ListOffsets(
+	ctx context.Context,
+	r *kafkago.ListOffsetsRequest,
+) (*kafkago.ListOffsetsResponse, error) {
 	return s.offsets(ctx, r)
 }
-func (s stubReader) Fetch(ctx context.Context, r *kafkago.FetchRequest) (*kafkago.FetchResponse, error) {
+func (s stubReader) Fetch(
+	ctx context.Context,
+	r *kafkago.FetchRequest,
+) (*kafkago.FetchResponse, error) {
 	return s.fetch(ctx, r)
 }
 
-func fixture(first, last int64, offsets []int64) stubReader {
+func fixture(
+	first int64,
+	last int64,
+	offsets []int64,
+) stubReader {
 	return stubReader{
-		metadata: func(_ context.Context, r *kafkago.MetadataRequest) (*kafkago.MetadataResponse, error) {
-			return &kafkago.MetadataResponse{Topics: []kafkago.Topic{{Name: r.Topics[0], Partitions: []kafkago.Partition{{ID: 0}}}}}, nil
+		metadata: func(
+			_ context.Context,
+			r *kafkago.MetadataRequest,
+		) (*kafkago.MetadataResponse, error) {
+			return &kafkago.MetadataResponse{Topics: []kafkago.Topic{{
+				Name:       r.Topics[0],
+				Partitions: []kafkago.Partition{{ID: 0}},
+			}}}, nil
 		},
-		offsets: func(_ context.Context, r *kafkago.ListOffsetsRequest) (*kafkago.ListOffsetsResponse, error) {
+		offsets: func(
+			_ context.Context,
+			r *kafkago.ListOffsetsRequest,
+		) (*kafkago.ListOffsetsResponse, error) {
 			topics := make(map[string][]kafkago.PartitionOffsets)
 			for topic, reqs := range r.Topics {
-				topics[topic] = []kafkago.PartitionOffsets{{Partition: reqs[0].Partition, FirstOffset: first, LastOffset: last}}
+				topics[topic] = []kafkago.PartitionOffsets{{
+					Partition:   reqs[0].Partition,
+					FirstOffset: first,
+					LastOffset:  last,
+				}}
 			}
 			return &kafkago.ListOffsetsResponse{Topics: topics}, nil
 		},
-		fetch: func(_ context.Context, r *kafkago.FetchRequest) (*kafkago.FetchResponse, error) {
+		fetch: func(
+			_ context.Context,
+			r *kafkago.FetchRequest,
+		) (*kafkago.FetchResponse, error) {
 			var records []kafkago.Record
 			for _, offset := range offsets {
 				if offset >= r.Offset {
-					records = append(records, kafkago.Record{Offset: offset, Time: time.Unix(offset, 0), Value: kafkago.NewBytes([]byte("value"))})
+					records = append(records, kafkago.Record{
+						Offset: offset,
+						Time:   time.Unix(offset, 0),
+						Value:  kafkago.NewBytes([]byte("value")),
+					})
 					if len(records) == 2 {
 						break
-					} // force multiple fetches within a window
+					} // Вынуждаем выполнить несколько запросов в одном окне.
 				}
 			}
-			return &kafkago.FetchResponse{HighWatermark: last, Records: kafkago.NewRecordReader(records...)}, nil
+			return &kafkago.FetchResponse{
+				HighWatermark: last,
+				Records:       kafkago.NewRecordReader(records...),
+			}, nil
 		},
 	}
 }
@@ -92,8 +141,14 @@ func TestRecentAvailableRecords(t *testing.T) {
 
 func TestRecentAcrossPartitions(t *testing.T) {
 	s := fixture(0, 3, []int64{0, 1, 2})
-	s.metadata = func(context.Context, *kafkago.MetadataRequest) (*kafkago.MetadataResponse, error) {
-		return &kafkago.MetadataResponse{Topics: []kafkago.Topic{{Name: "events", Partitions: []kafkago.Partition{{ID: 0}, {ID: 1}, {ID: 2}}}}}, nil
+	s.metadata = func(
+		context.Context,
+		*kafkago.MetadataRequest,
+	) (*kafkago.MetadataResponse, error) {
+		return &kafkago.MetadataResponse{Topics: []kafkago.Topic{{
+			Name:       "events",
+			Partitions: []kafkago.Partition{{ID: 0}, {ID: 1}, {ID: 2}},
+		}}}, nil
 	}
 	messages, err := (&Client{reader: s}).Recent(t.Context(), "events", 2)
 	if err != nil {
@@ -108,14 +163,20 @@ func TestRecentRetentionAdvances(t *testing.T) {
 	s := fixture(100, 105, []int64{103, 104})
 	baseOffsets, baseFetch := s.offsets, s.fetch
 	var moved bool
-	s.offsets = func(ctx context.Context, r *kafkago.ListOffsetsRequest) (*kafkago.ListOffsetsResponse, error) {
+	s.offsets = func(
+		ctx context.Context,
+		r *kafkago.ListOffsetsRequest,
+	) (*kafkago.ListOffsetsResponse, error) {
 		result, err := baseOffsets(ctx, r)
 		if moved {
 			result.Topics["events"][0].FirstOffset = 103
 		}
 		return result, err
 	}
-	s.fetch = func(ctx context.Context, r *kafkago.FetchRequest) (*kafkago.FetchResponse, error) {
+	s.fetch = func(
+		ctx context.Context,
+		r *kafkago.FetchRequest,
+	) (*kafkago.FetchResponse, error) {
 		if r.Offset < 103 {
 			moved = true
 			return &kafkago.FetchResponse{Error: kafkago.OffsetOutOfRange}, nil
@@ -134,13 +195,20 @@ func TestRecentRetentionAdvances(t *testing.T) {
 func TestRecentContinuesPastEmptyCompactedBatch(t *testing.T) {
 	s := fixture(0, 10, []int64{7, 9})
 	baseFetch := s.fetch
-	s.fetch = func(ctx context.Context, request *kafkago.FetchRequest) (*kafkago.FetchResponse, error) {
+	s.fetch = func(
+		ctx context.Context,
+		request *kafkago.FetchRequest,
+	) (*kafkago.FetchResponse, error) {
 		if request.Offset < 7 {
-			return &kafkago.FetchResponse{HighWatermark: 10, Records: &protocol.RecordStream{
-				Records: []protocol.RecordReader{&protocol.RecordBatch{
-					BaseOffset: 0, Records: kafkago.NewRecordReader(),
-				}},
-			}}, nil
+			return &kafkago.FetchResponse{
+				HighWatermark: 10,
+				Records: &protocol.RecordStream{
+					Records: []protocol.RecordReader{&protocol.RecordBatch{
+						BaseOffset: 0,
+						Records:    kafkago.NewRecordReader(),
+					}},
+				},
+			}, nil
 		}
 		return baseFetch(ctx, request)
 	}
@@ -155,14 +223,23 @@ func TestRecentContinuesPastEmptyCompactedBatch(t *testing.T) {
 
 func TestRecentSkipsControlAndEarlierRecords(t *testing.T) {
 	s := fixture(0, 4, nil)
-	s.fetch = func(_ context.Context, req *kafkago.FetchRequest) (*kafkago.FetchResponse, error) {
+	s.fetch = func(
+		_ context.Context,
+		req *kafkago.FetchRequest,
+	) (*kafkago.FetchResponse, error) {
 		if req.Offset >= 4 {
 			t.Fatalf("read beyond snapshot: %d", req.Offset)
 		}
 		return &kafkago.FetchResponse{Records: &protocol.RecordStream{Records: []protocol.RecordReader{
 			&protocol.RecordBatch{Records: kafkago.NewRecordReader(
-				kafkago.Record{Offset: 0, Value: kafkago.NewBytes([]byte("old"))},
-				kafkago.Record{Offset: 2, Value: kafkago.NewBytes([]byte("latest"))},
+				kafkago.Record{
+					Offset: 0,
+					Value:  kafkago.NewBytes([]byte("old")),
+				},
+				kafkago.Record{
+					Offset: 2,
+					Value:  kafkago.NewBytes([]byte("latest")),
+				},
 			)},
 			protocol.NewControlBatch(protocol.ControlRecord{Offset: 3}),
 		}}}, nil
@@ -184,15 +261,24 @@ func TestRecentCancellationAtEveryStage(t *testing.T) {
 			block := func(ctx context.Context) error { close(started); <-ctx.Done(); return ctx.Err() }
 			switch stage {
 			case "metadata":
-				s.metadata = func(ctx context.Context, _ *kafkago.MetadataRequest) (*kafkago.MetadataResponse, error) {
+				s.metadata = func(
+					ctx context.Context,
+					_ *kafkago.MetadataRequest,
+				) (*kafkago.MetadataResponse, error) {
 					return nil, block(ctx)
 				}
 			case "offsets":
-				s.offsets = func(ctx context.Context, _ *kafkago.ListOffsetsRequest) (*kafkago.ListOffsetsResponse, error) {
+				s.offsets = func(
+					ctx context.Context,
+					_ *kafkago.ListOffsetsRequest,
+				) (*kafkago.ListOffsetsResponse, error) {
 					return nil, block(ctx)
 				}
 			case "fetch":
-				s.fetch = func(ctx context.Context, _ *kafkago.FetchRequest) (*kafkago.FetchResponse, error) {
+				s.fetch = func(
+					ctx context.Context,
+					_ *kafkago.FetchRequest,
+				) (*kafkago.FetchResponse, error) {
 					return nil, block(ctx)
 				}
 			}
@@ -218,12 +304,16 @@ func TestRecentUnavailableBrokerHonorsDeadline(t *testing.T) {
 	c := New([]string{"silent-broker:9092"})
 	var mu sync.Mutex
 	var peers []net.Conn
-	c.transport.Dial = func(context.Context, string, string) (net.Conn, error) {
+	c.transport.Dial = func(
+		context.Context,
+		string,
+		string,
+	) (net.Conn, error) {
 		conn, peer := net.Pipe()
 		mu.Lock()
 		peers = append(peers, peer)
 		mu.Unlock()
-		return conn, nil // accept a connection but never answer the Kafka handshake
+		return conn, nil // Принимаем соединение, но не отвечаем на запрос Kafka.
 	}
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -253,19 +343,37 @@ func TestRecentKafkaErrors(t *testing.T) {
 			s := fixture(0, 1, []int64{0})
 			switch stage {
 			case "topic":
-				s.metadata = func(context.Context, *kafkago.MetadataRequest) (*kafkago.MetadataResponse, error) {
-					return &kafkago.MetadataResponse{Topics: []kafkago.Topic{{Name: "events", Error: kafkago.UnknownTopicOrPartition}}}, nil
+				s.metadata = func(
+					context.Context,
+					*kafkago.MetadataRequest,
+				) (*kafkago.MetadataResponse, error) {
+					return &kafkago.MetadataResponse{Topics: []kafkago.Topic{{
+						Name:  "events",
+						Error: kafkago.UnknownTopicOrPartition,
+					}}}, nil
 				}
 			case "partition":
-				s.metadata = func(context.Context, *kafkago.MetadataRequest) (*kafkago.MetadataResponse, error) {
-					return &kafkago.MetadataResponse{Topics: []kafkago.Topic{{Name: "events", Partitions: []kafkago.Partition{{Error: kafkago.UnknownTopicOrPartition}}}}}, nil
+				s.metadata = func(
+					context.Context,
+					*kafkago.MetadataRequest,
+				) (*kafkago.MetadataResponse, error) {
+					return &kafkago.MetadataResponse{Topics: []kafkago.Topic{{
+						Name:       "events",
+						Partitions: []kafkago.Partition{{Error: kafkago.UnknownTopicOrPartition}},
+					}}}, nil
 				}
 			case "offsets":
-				s.offsets = func(context.Context, *kafkago.ListOffsetsRequest) (*kafkago.ListOffsetsResponse, error) {
+				s.offsets = func(
+					context.Context,
+					*kafkago.ListOffsetsRequest,
+				) (*kafkago.ListOffsetsResponse, error) {
 					return nil, kafkago.UnknownTopicOrPartition
 				}
 			case "fetch":
-				s.fetch = func(context.Context, *kafkago.FetchRequest) (*kafkago.FetchResponse, error) {
+				s.fetch = func(
+					context.Context,
+					*kafkago.FetchRequest,
+				) (*kafkago.FetchResponse, error) {
 					return &kafkago.FetchResponse{Error: kafkago.UnknownTopicOrPartition}, nil
 				}
 			}

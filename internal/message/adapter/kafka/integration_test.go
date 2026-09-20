@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/repzspb/raf/internal/protobuf"
+	"github.com/repzspb/raf/internal/message/adapter/protobuf"
+	"github.com/repzspb/raf/internal/message/model"
 	kafkago "github.com/segmentio/kafka-go"
 )
 
-// Opt in against a disposable/local broker. Only this test's unique topic is
-// created and deleted; existing topics and consumer groups are not touched.
+// Запускается явно на локальном или временном брокере. Тест создаёт и удаляет
+// только свой уникальный топик, не затрагивая существующие топики и группы.
 func TestIntegrationKafka(t *testing.T) {
 	brokers := os.Getenv("RAF_TEST_KAFKA_BROKERS")
 	if brokers == "" {
@@ -33,7 +34,11 @@ func TestIntegrationKafka(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	created, err := admin.CreateTopics(ctx, &kafkago.CreateTopicsRequest{
-		Topics: []kafkago.TopicConfig{{Topic: topic, NumPartitions: 3, ReplicationFactor: 1}},
+		Topics: []kafkago.TopicConfig{{
+			Topic:             topic,
+			NumPartitions:     3,
+			ReplicationFactor: 1,
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +59,7 @@ func TestIntegrationKafka(t *testing.T) {
 		}
 	})
 	t.Logf("test topic: %s", topic)
-	// Topic creation can return before every broker has elected its leaders.
+	// Создание топика может завершиться раньше выбора лидеров партиций.
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -71,13 +76,13 @@ func TestIntegrationKafka(t *testing.T) {
 		case <-ticker.C:
 		}
 	}
-	codec, err := protobuf.New(ctx, []string{"event.proto"}, []string{"../../examples/proto"})
+	codec, err := protobuf.New(ctx, []string{"event.proto"}, []string{"../../../../examples/proto"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	baseTime := time.Now().UTC().Truncate(time.Millisecond)
-	// Compressed batches force Fetch to return records before the requested
-	// offset. Partition 2 remains empty during the initial inspection.
+	// Сжатые пакеты заставляют Fetch вернуть записи до запрошенного offset.
+	// Партиция 2 остаётся пустой при первом чтении.
 	for partition := 0; partition < 2; partition++ {
 		var records []kafkago.Record
 		for i := 0; i < 8; i++ {
@@ -87,13 +92,17 @@ func TestIntegrationKafka(t *testing.T) {
 				t.Fatal(err)
 			}
 			records = append(records, kafkago.Record{
-				Time: baseTime.Add(time.Duration(partition*10+i) * time.Millisecond),
-				Key:  kafkago.NewBytes([]byte(body)), Value: kafkago.NewBytes(value),
+				Time:  baseTime.Add(time.Duration(partition*10+i) * time.Millisecond),
+				Key:   kafkago.NewBytes([]byte(body)),
+				Value: kafkago.NewBytes(value),
 			})
 		}
 		response, err := admin.Produce(ctx, &kafkago.ProduceRequest{
-			Topic: topic, Partition: partition, RequiredAcks: kafkago.RequireAll,
-			Compression: kafkago.Gzip, Records: kafkago.NewRecordReader(records...),
+			Topic:        topic,
+			Partition:    partition,
+			RequiredAcks: kafkago.RequireAll,
+			Compression:  kafkago.Gzip,
+			Records:      kafkago.NewRecordReader(records...),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -117,12 +126,20 @@ func TestIntegrationKafka(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Exercise raf's actual synchronous publisher and delivery receipt.
+	// Проверяем публикацию через raf и подтверждённую позицию записи.
 	value, err := codec.Encode("example.Event", []byte(`{"id":"raf-published"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	receipt, err := c.Publish(ctx, topic, "raf-key", []kafkago.Header{{Key: "id", Value: []byte("integration")}}, value)
+	receipt, err := c.Publish(ctx, model.Message{
+		Topic: topic,
+		Key:   []byte("raf-key"),
+		Headers: []model.Header{{
+			Key:   "id",
+			Value: []byte("integration"),
+		}},
+		Value: value,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,14 +162,32 @@ func TestIntegrationKafka(t *testing.T) {
 	if !found {
 		t.Fatal("published record absent from inspection")
 	}
-	// Preserve Kafka's distinction between zero bytes and null, plus binary
-	// metadata. These are fetched through the real wire decoder.
+	// Проверяем различие между нулём байт и null, а также бинарные метаданные
+	// при чтении реального ответа брокера.
 	response, err := admin.Produce(ctx, &kafkago.ProduceRequest{
-		Topic: topic, Partition: 2, RequiredAcks: kafkago.RequireAll,
+		Topic:        topic,
+		Partition:    2,
+		RequiredAcks: kafkago.RequireAll,
 		Records: kafkago.NewRecordReader(
-			kafkago.Record{Time: baseTime, Key: kafkago.NewBytes([]byte("deleted")), Value: nil},
-			kafkago.Record{Time: baseTime, Key: kafkago.NewBytes([]byte{}), Value: kafkago.NewBytes([]byte{})},
-			kafkago.Record{Time: baseTime, Key: kafkago.NewBytes([]byte{0xff}), Value: kafkago.NewBytes(value), Headers: []kafkago.Header{{Key: "binary", Value: []byte{0xfe}}}},
+			kafkago.Record{
+				Time:  baseTime,
+				Key:   kafkago.NewBytes([]byte("deleted")),
+				Value: nil,
+			},
+			kafkago.Record{
+				Time:  baseTime,
+				Key:   kafkago.NewBytes([]byte{}),
+				Value: kafkago.NewBytes([]byte{}),
+			},
+			kafkago.Record{
+				Time:  baseTime,
+				Key:   kafkago.NewBytes([]byte{0xff}),
+				Value: kafkago.NewBytes(value),
+				Headers: []kafkago.Header{{
+					Key:   "binary",
+					Value: []byte{0xfe},
+				}},
+			},
 		),
 	})
 	if err != nil {

@@ -133,6 +133,8 @@ The broker's advertised address must be reachable from the container. Mount your
 
 ## Development checks
 
+The [architecture guide](docs/architecture.md) describes the package structure, request flow, and application lifecycle in Russian.
+
 ```sh
 go test -race -count=1 ./...
 go vet ./...

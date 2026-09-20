@@ -68,19 +68,74 @@ func TestLoadTopicTypes(t *testing.T) {
 		want    map[string]string
 		invalid bool
 	}{
-		{name: "not configured", raw: "", want: nil},
-		{name: "empty object", raw: `{}`, want: map[string]string{}},
-		{name: "mappings", raw: `{"billing.events":" billing.Event ","metrics.raw":"metrics.Metric"}`, want: map[string]string{"billing.events": "billing.Event", "metrics.raw": "metrics.Metric"}},
-		{name: "invalid JSON", raw: `{`, invalid: true},
-		{name: "array", raw: `[]`, invalid: true},
-		{name: "string", raw: `"billing.Event"`, invalid: true},
-		{name: "null object", raw: `null`, invalid: true},
-		{name: "null type", raw: `{"billing.events":null}`, invalid: true},
-		{name: "numeric type", raw: `{"billing.events":42}`, invalid: true},
-		{name: "empty type", raw: `{"billing.events":""}`, invalid: true},
-		{name: "blank type", raw: `{"billing.events":"  "}`, invalid: true},
-		{name: "empty topic", raw: `{"":"billing.Event"}`, invalid: true},
-		{name: "blank topic", raw: `{"  ":"billing.Event"}`, invalid: true},
+		{
+			name: "not configured",
+			raw:  "",
+			want: nil,
+		},
+		{
+			name: "empty object",
+			raw:  `{}`,
+			want: map[string]string{},
+		},
+		{
+			name: "mappings",
+			raw:  `{"billing.events":" billing.Event ","metrics.raw":"metrics.Metric"}`,
+			want: map[string]string{
+				"billing.events": "billing.Event",
+				"metrics.raw":    "metrics.Metric",
+			},
+		},
+		{
+			name:    "invalid JSON",
+			raw:     `{`,
+			invalid: true,
+		},
+		{
+			name:    "array",
+			raw:     `[]`,
+			invalid: true,
+		},
+		{
+			name:    "string",
+			raw:     `"billing.Event"`,
+			invalid: true,
+		},
+		{
+			name:    "null object",
+			raw:     `null`,
+			invalid: true,
+		},
+		{
+			name:    "null type",
+			raw:     `{"billing.events":null}`,
+			invalid: true,
+		},
+		{
+			name:    "numeric type",
+			raw:     `{"billing.events":42}`,
+			invalid: true,
+		},
+		{
+			name:    "empty type",
+			raw:     `{"billing.events":""}`,
+			invalid: true,
+		},
+		{
+			name:    "blank type",
+			raw:     `{"billing.events":"  "}`,
+			invalid: true,
+		},
+		{
+			name:    "empty topic",
+			raw:     `{"":"billing.Event"}`,
+			invalid: true,
+		},
+		{
+			name:    "blank topic",
+			raw:     `{"  ":"billing.Event"}`,
+			invalid: true,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setRequiredEnv(t)
@@ -104,11 +159,26 @@ func TestLoadTopicTypes(t *testing.T) {
 
 func TestLoadRejectsEmptyRequiredValues(t *testing.T) {
 	for _, test := range []struct{ name, value string }{
-		{name: "RAF_KAFKA_BROKERS", value: " , "},
-		{name: "RAF_PROTO_FILES", value: " , "},
-		{name: "RAF_PROTO_IMPORT_PATHS", value: " "},
-		{name: "RAF_PROTO_IMPORT_PATHS", value: "." + string(os.PathListSeparator)},
-		{name: "RAF_PROTO_IMPORT_PATHS", value: string(os.PathListSeparator) + "."},
+		{
+			name:  "RAF_KAFKA_BROKERS",
+			value: " , ",
+		},
+		{
+			name:  "RAF_PROTO_FILES",
+			value: " , ",
+		},
+		{
+			name:  "RAF_PROTO_IMPORT_PATHS",
+			value: " ",
+		},
+		{
+			name:  "RAF_PROTO_IMPORT_PATHS",
+			value: "." + string(os.PathListSeparator),
+		},
+		{
+			name:  "RAF_PROTO_IMPORT_PATHS",
+			value: string(os.PathListSeparator) + ".",
+		},
 	} {
 		t.Run(test.name+"="+test.value, func(t *testing.T) {
 			setRequiredEnv(t)

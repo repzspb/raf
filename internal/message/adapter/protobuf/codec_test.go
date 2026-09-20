@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repzspb/raf/internal/protobuf"
+	"github.com/repzspb/raf/internal/message/adapter/protobuf"
 )
 
 const recordProto = `syntax = "proto3";
@@ -50,7 +50,12 @@ func newTestCodec(t *testing.T) *protobuf.Codec {
 	return codec
 }
 
-func writeProto(t *testing.T, dir, name, source string) {
+func writeProto(
+	t *testing.T,
+	dir string,
+	name string,
+	source string,
+) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o600); err != nil {
 		t.Fatal(err)
@@ -78,8 +83,14 @@ func TestCodecRoundTrip(t *testing.T) {
 				"imported":{"name":"imported contract"}
 			}`,
 		},
-		{name: "numeric oneof preserves zero", body: `{"count":"0"}`},
-		{name: "absent optional fields stay absent", body: `{"id":"test-2"}`},
+		{
+			name: "numeric oneof preserves zero",
+			body: `{"count":"0"}`,
+		},
+		{
+			name: "absent optional fields stay absent",
+			body: `{"id":"test-2"}`,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			encoded, err := codec.Encode("example.Record", []byte(test.body))
@@ -136,12 +147,36 @@ func TestCodecRejectsInvalidInput(t *testing.T) {
 		typeName string
 		body     string
 	}{
-		{name: "unknown type", typeName: "example.Missing", body: `{}`},
-		{name: "enum is not a message", typeName: "example.Record.State", body: `{}`},
-		{name: "malformed JSON", typeName: "example.Record", body: `{`},
-		{name: "unknown field", typeName: "example.Record", body: `{"status":"CREATED"}`},
-		{name: "two oneof alternatives", typeName: "example.Record", body: `{"note":"test","count":"1"}`},
-		{name: "invalid enum", typeName: "example.Record", body: `{"state":"CREATED_WRONG"}`},
+		{
+			name:     "unknown type",
+			typeName: "example.Missing",
+			body:     `{}`,
+		},
+		{
+			name:     "enum is not a message",
+			typeName: "example.Record.State",
+			body:     `{}`,
+		},
+		{
+			name:     "malformed JSON",
+			typeName: "example.Record",
+			body:     `{`,
+		},
+		{
+			name:     "unknown field",
+			typeName: "example.Record",
+			body:     `{"status":"CREATED"}`,
+		},
+		{
+			name:     "two oneof alternatives",
+			typeName: "example.Record",
+			body:     `{"note":"test","count":"1"}`,
+		},
+		{
+			name:     "invalid enum",
+			typeName: "example.Record",
+			body:     `{"state":"CREATED_WRONG"}`,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := codec.Encode(test.typeName, []byte(test.body)); err == nil {
@@ -160,7 +195,10 @@ func TestMissingProtoDiagnostics(t *testing.T) {
 		rootSource string
 		missing    string
 	}{
-		{name: "missing root", missing: "root.proto"},
+		{
+			name:    "missing root",
+			missing: "root.proto",
+		},
 		{
 			name:       "missing import",
 			rootSource: `syntax = "proto3"; import "absent.proto"; message Root {}`,
@@ -186,7 +224,11 @@ func TestMissingProtoDiagnostics(t *testing.T) {
 	}
 }
 
-func assertJSONEqual(t *testing.T, want, got []byte) {
+func assertJSONEqual(
+	t *testing.T,
+	want []byte,
+	got []byte,
+) {
 	t.Helper()
 	var wantValue, gotValue any
 	if err := json.Unmarshal(want, &wantValue); err != nil {
