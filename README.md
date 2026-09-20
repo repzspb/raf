@@ -1,10 +1,12 @@
 # raf
 
-`raf` is a local HTTP bridge for testing Kafka services that use Protobuf. Send a message as ProtoJSON from Postman, or inspect recent messages as JSON. Kafka values contain raw Protobuf bytes, without a Schema Registry prefix.
+<img src="docs/images/raf.png" alt="Гофер в чашке кофе" width="250" align="right">
+`raf` — локальный HTTP-сервис для тестирования сервисов, которые работают с Kafka и Protobuf. Через Postman можно отправить сообщение в формате ProtoJSON или прочитать последние сообщения в виде JSON. В Kafka записываются бинарные данные Protobuf без префикса Schema Registry.
+<br clear="both">
 
-## Try it with Docker Compose
+## Быстрый запуск через Docker Compose
 
-From the repository directory, start raf and a separate local Kafka broker:
+Из каталога репозитория запустите raf и отдельный локальный брокер Kafka:
 
 ```sh
 docker compose up --build -d
@@ -15,15 +17,17 @@ curl -X POST 'http://localhost:18080/topics/example.events/messages?key=example-
 curl 'http://localhost:18080/topics/example.events/messages?limit=10'
 ```
 
-Compose waits for Kafka and creates `example.events` with three partitions before starting raf. The example contract and its topic mapping are already configured. The broker uses the official [Apache Kafka 4.1.2 image](https://kafka.apache.org/41/getting-started/docker/).
+Перед запуском raf Compose дожидается готовности Kafka и создаёт топик `example.events` с тремя партициями. Пример контракта и тип сообщения для этого топика уже настроены. Брокер использует официальный [образ Apache Kafka 4.1.2](https://kafka.apache.org/41/getting-started/docker/).
 
-The HTTP API is available at `localhost:18080`; Kafka is available to host applications at `localhost:19092` and to Compose services at `kafka:9092`. These ports are bound to the loopback interface. Override `RAF_HTTP_PORT` and `RAF_KAFKA_PORT` in your shell or copy [.env.example](.env.example) to `.env`. To debug raf in GoLand with this broker, start only the broker and topic initializer with `docker compose up -d kafka-init`, then use `RAF_KAFKA_BROKERS=localhost:19092` in GoLand.
+HTTP API доступен по адресу `localhost:18080`. Приложения на хосте могут подключаться к Kafka через `localhost:19092`, а сервисы внутри Compose — через `kafka:9092`. Порты опубликованы только на локальном интерфейсе. Чтобы изменить их, задайте `RAF_HTTP_PORT` и `RAF_KAFKA_PORT` в окружении или скопируйте [.env.example](.env.example) в `.env`.
 
-Use `docker compose logs -f raf` to view logs and `docker compose stop` to stop the example while keeping its data. `docker compose down` removes the containers and their Kafka data; this example has no persistent data volume.
+Для отладки raf в GoLand запустите только брокер и создание топика командой `docker compose up -d kafka-init`, затем укажите в GoLand `RAF_KAFKA_BROKERS=localhost:19092`.
 
-## Run locally
+Команда `docker compose logs -f raf` показывает логи. Команда `docker compose stop` останавливает сервисы, сохраняя данные. Команда `docker compose down` удаляет контейнеры вместе с данными Kafka: в этом примере отдельный том для постоянного хранения не используется.
 
-Set the broker address and the `.proto` files to load. Go 1.24 or newer is required; CI and the Docker build use Go 1.26.
+## Локальный запуск
+
+Укажите адрес брокера и `.proto`-файлы для загрузки. Нужен Go 1.24 или новее; CI и сборка Docker-образа используют Go 1.26.
 
 ```sh
 export RAF_KAFKA_BROKERS=localhost:9092
@@ -32,15 +36,15 @@ export RAF_PROTO_FILES=event.proto
 go run ./cmd/raf
 ```
 
-`RAF_HTTP_ADDR` defaults to `:8080`. Multiple brokers and source files can be separated by commas. For a real contract, point the import paths at the directories containing its `.proto` files and their imports, then list the root files whose message types you want to use.
+По умолчанию `RAF_HTTP_ADDR` равен `:8080`. Несколько адресов брокеров и имён файлов перечисляются через запятую. Для своих контрактов укажите каталоги с `.proto`-файлами и их импортами, затем перечислите корневые файлы с нужными типами сообщений.
 
-In GoLand, create a Go Build configuration for the **package** `./cmd/raf`, use the repository as the working directory, and set the same environment variables there. Run it with Debug. The application does not load `.env` files itself.
+В GoLand создайте конфигурацию Go Build для **пакета** `./cmd/raf`, выберите каталог репозитория в качестве рабочего и задайте те же переменные окружения. Запускайте конфигурацию через Debug. Само приложение не загружает файлы `.env`.
 
-## Configure contracts and topic types
+## Настройка контрактов и типов топиков
 
-### YAML configuration
+### Конфигурация в YAML
 
-Set `RAF_CONFIG_FILE` to load a configuration file. [examples/raf.yaml](examples/raf.yaml) is a working example with two Protobuf contracts:
+Укажите путь к файлу в `RAF_CONFIG_FILE`. Готовый пример с двумя Protobuf-контрактами находится в [examples/raf.yaml](examples/raf.yaml):
 
 ```sh
 RAF_CONFIG_FILE=./examples/raf.yaml go run ./cmd/raf
@@ -65,13 +69,13 @@ topics:
     type: example.ProjectChangeEvent
 ```
 
-Configuration precedence is **defaults → file → nonempty environment variables**. Environment lists and `RAF_TOPIC_TYPES` replace the entire corresponding file value; `RAF_TOPIC_TYPES='{}'` clears all mappings. Empty environment variables do not override the file.
+Порядок применения настроек: **значения по умолчанию → файл → непустые переменные окружения**. Списки из переменных окружения и `RAF_TOPIC_TYPES` полностью заменяют соответствующие значения файла. Значение `RAF_TOPIC_TYPES='{}'` очищает все сопоставления типов. Пустые переменные окружения не переопределяют настройки файла.
 
-Relative `protobuf.import_paths` entries are resolved from the configuration file's directory. When omitted, that directory is used. `protobuf.files` entries remain relative to the import directories. Paths supplied through `RAF_PROTO_IMPORT_PATHS` remain relative to the process working directory. Paths and values are literal; shell variables in YAML are not expanded.
+Относительные пути в `protobuf.import_paths` считаются от каталога конфигурационного файла. Если параметр не задан, используется сам этот каталог. Имена в `protobuf.files` указываются относительно каталогов поиска импортов. Пути из переменной `RAF_PROTO_IMPORT_PATHS` считаются от рабочего каталога процесса. Пути и значения используются буквально: переменные оболочки внутри YAML не подставляются.
 
-The file must contain one YAML mapping. Unknown fields, duplicate keys, null values, and non-string scalar values are rejected. The file is only loaded when explicitly selected; there is no automatic search for `raf.yaml`. Without `RAF_CONFIG_FILE`, the existing environment-only launch works as before. Restart raf to reload settings.
+Файл должен содержать один YAML-документ с объектом настроек. Неизвестные поля, повторяющиеся ключи, значения `null` и скалярные значения других типов, кроме строк, отклоняются. Файл загружается только через `RAF_CONFIG_FILE`; автоматического поиска `raf.yaml` нет. Без этой переменной можно по-прежнему настроить приложение только через окружение. Для перечитывания настроек перезапустите raf.
 
-In GoLand, set `RAF_CONFIG_FILE` to the file path and remove old environment overrides you no longer need. To use a file in Docker, mount the configuration and its contracts together, and override the broker address if necessary:
+В GoLand задайте `RAF_CONFIG_FILE` и уберите старые переменные окружения, если они больше не должны переопределять файл. Для запуска в Docker смонтируйте конфигурацию вместе с контрактами и при необходимости переопределите адрес брокера:
 
 ```sh
 docker run --rm -p 127.0.0.1:8080:8080 \
@@ -81,27 +85,27 @@ docker run --rm -p 127.0.0.1:8080:8080 \
   raf
 ```
 
-The sample file configures two topic types but does not create topics. Compose's initializer creates only `example.events`; create `example.projects` separately before publishing to it. Root-level `raf.yaml` and `raf.yml` are ignored by Git and excluded from the Docker build context for local configuration.
+Пример файла задаёт типы для двух топиков, но не создаёт их в Kafka. Инициализатор Compose создаёт только `example.events`; перед публикацией в `example.projects` создайте этот топик отдельно. Файлы `raf.yaml` и `raf.yml` в корне репозитория предназначены для локальных настроек: они игнорируются Git и исключены из контекста сборки Docker.
 
-### Environment variables
+### Переменные окружения
 
-| Variable | Meaning | Default |
+| Переменная | Назначение | По умолчанию |
 | --- | --- | --- |
-| `RAF_CONFIG_FILE` | Path to a YAML configuration file | Not loaded |
-| `RAF_KAFKA_BROKERS` | Comma-separated broker addresses | Required unless provided in the file |
-| `RAF_PROTO_FILES` | Comma-separated root `.proto` file names | Required unless provided in the file |
-| `RAF_PROTO_IMPORT_PATHS` | Directories used to find root files and imports | `.` |
-| `RAF_TOPIC_TYPES` | JSON object mapping topic names to Protobuf message names | No mappings |
-| `RAF_HTTP_ADDR` | HTTP listen address | `:8080` |
+| `RAF_CONFIG_FILE` | Путь к YAML-файлу конфигурации | Файл не загружается |
+| `RAF_KAFKA_BROKERS` | Адреса брокеров через запятую | Обязательно, если не задано в файле |
+| `RAF_PROTO_FILES` | Имена корневых `.proto`-файлов через запятую | Обязательно, если не задано в файле |
+| `RAF_PROTO_IMPORT_PATHS` | Каталоги поиска корневых файлов и импортов | `.` при запуске без файла конфигурации |
+| `RAF_TOPIC_TYPES` | JSON-объект, связывающий имена топиков с типами сообщений Protobuf | Сопоставления не заданы |
+| `RAF_HTTP_ADDR` | Адрес HTTP-сервера | `:8080` |
 
-File names in `RAF_PROTO_FILES` are relative to an import directory. `RAF_PROTO_IMPORT_PATHS` uses the operating system's path separator: `:` on macOS/Linux, `;` on Windows. For example, given contracts in two repositories:
+Имена в `RAF_PROTO_FILES` указываются относительно одного из каталогов поиска. В `RAF_PROTO_IMPORT_PATHS` используется разделитель путей операционной системы: `:` в macOS/Linux и `;` в Windows. Например, контракты могут находиться в двух репозиториях:
 
 ```text
 /path/to/events/api/event.proto
 /path/to/projects/api/project.proto
 ```
 
-Load both roots on macOS/Linux with:
+Для загрузки обоих корневых файлов в macOS/Linux:
 
 ```sh
 export RAF_PROTO_IMPORT_PATHS=/path/to/events/api:/path/to/projects/api
@@ -109,34 +113,36 @@ export RAF_PROTO_FILES=event.proto,project.proto
 export RAF_TOPIC_TYPES='{"example.events":"example.Event","projects.changed":"projects.ProjectChanged"}'
 ```
 
-Keep both directories in `RAF_PROTO_IMPORT_PATHS` when both files are listed. Compilation errors report the requested files and the absolute import directories; invalid directories are rejected at startup. Imported contracts are loaded automatically, including standard Google Protobuf types. Restart raf after changing contracts or configuration.
+Если перечислены оба файла, сохраните оба каталога в `RAF_PROTO_IMPORT_PATHS`. Ошибки компиляции содержат имена запрошенных файлов и абсолютные пути каталогов поиска. Несуществующие каталоги отклоняются при запуске. Импортируемые контракты загружаются автоматически, включая стандартные типы Google Protobuf. После изменения контрактов или конфигурации перезапустите raf.
 
-To discover the exact message names, request:
+Чтобы узнать точные имена загруженных типов:
 
 ```sh
 curl http://localhost:8080/types
 # {"types":["example.Event"]}
 ```
 
-The list is sorted and includes nested and imported message types, excluding synthetic map-entry types. Use the full name without a trailing dot. Mappings in `RAF_TOPIC_TYPES` are validated at startup. For both POST and GET, a nonempty `type` query parameter overrides the configured topic mapping; without either, the API returns HTTP 400.
+Список отсортирован и включает вложенные и импортированные сообщения. Служебные типы элементов `map` в него не попадают. Указывайте полное имя типа без точки в конце.
 
-## Publish
+Сопоставления типов в `RAF_TOPIC_TYPES` проверяются при запуске. Для публикации и чтения непустой query-параметр `type` имеет приоритет над настройкой топика. Если тип не задан ни в запросе, ни в настройках, API возвращает HTTP 400.
 
-### Generate an example
+## Публикация сообщений
 
-`GET /types/{type}/example` returns a ProtoJSON body ready to paste into a publish request:
+### Генерация примера JSON
+
+`GET /types/{type}/example` возвращает тело в формате ProtoJSON, которое можно вставить в запрос публикации:
 
 ```sh
 curl http://localhost:8080/types/example.Event/example
 ```
 
-The generator fills scalar and nested fields, one element of each list and map, and the first expandable alternative of each `oneof`. Enums use their first declared value. Timestamps, durations, bytes, and 64-bit numbers follow ProtoJSON rules. Values are placeholders: replace IDs and other business data before sending.
+Генератор заполняет скалярные и вложенные поля, по одному элементу каждого списка и `map`, а также первый вариант каждого `oneof`, который удаётся раскрыть. Для enum используется первое объявленное значение. Временные метки, длительности, байты и 64-битные числа представляются по правилам ProtoJSON. Значения в примере — заготовки: перед отправкой подставьте нужные идентификаторы и другие данные.
 
-Optional recursive branches and nesting beyond eight message levels are omitted. Required fields that cannot be generated and examples exceeding 2,048 visited fields return HTTP 400. `Any` is generated as `{}`, because the contract does not specify its payload type. Generating an example does not contact Kafka.
+Необязательные рекурсивные ветви и вложенность глубже восьми уровней сообщений пропускаются. Если обязательное поле невозможно сгенерировать или обход превышает 2048 полей, возвращается HTTP 400. Для `Any` формируется `{}`, поскольку контракт не определяет тип его содержимого. Генерация примера не обращается к Kafka.
 
-### Send a message
+### Отправка сообщения
 
-Use the fully qualified Protobuf message name in `type`. The HTTP body follows the [ProtoJSON mapping](https://protobuf.dev/programming-guides/json/), including its rules for timestamps, enums, and 64-bit integers. Unknown fields and invalid values return HTTP 400.
+В `type` укажите полное имя Protobuf-сообщения. HTTP-тело должно соответствовать [правилам ProtoJSON](https://protobuf.dev/programming-guides/json/), включая представление временных меток, enum и 64-битных целых чисел. Неизвестные поля и некорректные значения приводят к HTTP 400.
 
 ```sh
 curl -X POST 'http://localhost:8080/topics/example.events/messages?type=example.Event&key=example-1' \
@@ -145,54 +151,66 @@ curl -X POST 'http://localhost:8080/topics/example.events/messages?type=example.
   -d '{"id":"example-1","status":"CREATED"}'
 ```
 
-`key` and `X-Raf-Headers` are optional. The header contains a JSON object with string values; its names are written as Kafka header names. The JSON body is limited to 1 MiB. A successful response is HTTP 201 and includes the topic, partition, and offset. Each POST is sent immediately without waiting to fill a producer batch.
+Параметр `key` и HTTP-заголовок `X-Raf-Headers` необязательны. В `X-Raf-Headers` передаётся JSON-объект со строковыми значениями: его ключи становятся именами заголовков Kafka-сообщения. Эти заголовки передаются отдельно от тела.
 
-The Kafka topic must already exist; `raf` does not create topics automatically.
+Размер JSON-тела ограничен 1 МиБ. Успешный ответ имеет статус HTTP 201 и содержит топик, партицию и offset. Каждый POST отправляется сразу, без ожидания заполнения пакета сообщений отправителя.
 
-## Inspect recent messages
+Топик Kafka должен уже существовать: raf не создаёт топики автоматически.
 
-### Browse topics
+## Просмотр топиков и сообщений
+
+### Список топиков и их настройки
 
 ```sh
 curl http://localhost:8080/topics
 curl http://localhost:8080/topics/example.events
 ```
 
-`GET /topics` lists existing Kafka topics by name, including internal topics. Each entry contains `name`, `internal`, and `type` (the configured raf default, or `null`). Configured names that do not exist in Kafka are not added to this list.
+`GET /topics` возвращает существующие топики Kafka, отсортированные по имени, включая служебные. Каждая запись содержит `name`, `internal` и `type` — настроенный в raf тип по умолчанию либо `null`. Топики, указанные в конфигурации, но отсутствующие в Kafka, в список не добавляются.
 
-`GET /topics/{topic}` adds `partitions`, sorted by `id`, with `first_offset` and `end_offset`. The range is `[first_offset, end_offset)`; equal bounds mean an empty range. The difference is not a message count because compaction can leave gaps. Partitions are observed independently. These endpoints read metadata, never join a consumer group, and do not create topics. A missing topic returns HTTP 404; broker timeouts return 504 and other broker failures return 502. The type describes raf configuration, not a type inferred from Kafka records.
+`GET /topics/{topic}` дополнительно возвращает список `partitions`, отсортированный по `id`. Для каждой партиции указаны `first_offset` и `end_offset`. Диапазон чтения — `[first_offset, end_offset)`: нижняя граница включается, верхняя исключается. Равные границы означают пустой диапазон. Разность границ не равна числу сообщений, поскольку после compaction могут оставаться пропуски.
 
-### Read messages
+Границы партиций определяются независимо друг от друга. Эти эндпоинты читают метаданные, не присоединяются к группе потребителей и не создают топики. Для отсутствующего топика возвращается HTTP 404, при таймауте брокера — 504, при других ошибках брокера — 502. Поле `type` отражает настройку raf; тип содержимого записей Kafka автоматически не определяется.
+
+### Чтение последних сообщений
 
 ```sh
 curl 'http://localhost:8080/topics/example.events/messages?type=example.Event&limit=10'
 ```
 
-`limit` defaults to 10 and accepts 1–100. It caps the total response across all partitions. The endpoint reads without joining a consumer group or committing offsets, so it does not advance the tested service's position.
+Параметр `limit` принимает значения от 1 до 100; по умолчанию — 10. Он ограничивает общее число записей в ответе по всем партициям. Чтение не использует группу потребителей и не фиксирует offsets, поэтому не сдвигает позицию тестируемого сервиса.
 
-For each partition, raf captures the available offset range, then reads up to `limit` of the last retained records by offset. It searches older offsets when compaction leaves gaps. These candidates are combined, sorted by record timestamp descending, and trimmed to the total `limit`. Equal timestamps are ordered by partition ascending, then offset descending. This is a view of partition tails: a much older record with a later timestamp is not guaranteed to appear, and Kafka has no single order across partitions.
+Для каждой партиции raf фиксирует доступные границы offset и выбирает до `limit` последних сохранившихся записей по offset. Если после compaction остались пропуски, поиск продолжается в более старых диапазонах. Затем записи объединяются, сортируются по времени от новых к старым и ограничиваются общим `limit`. При одинаковом времени порядок задаётся номером партиции по возрастанию, затем offset по убыванию.
 
-Reads use batches and at most four partitions are read concurrently. Raf does not wait for new messages or include records beyond each partition's captured end offset. Empty partitions return no records. Each partition captures its range independently; this is not an atomic snapshot of the whole topic. Retention or compaction during the request can remove records before they are read. The request returns the records still available, or an error if reading fails; it does not return a silently truncated partial result after a timeout.
+Такой ответ показывает последние записи партиций. Более старая по offset запись с поздней временной меткой может не попасть в выборку. Единого порядка сообщений между партициями в Kafka нет.
 
-Each record contains `partition`, `offset`, `time`, `key`, `headers`, and its decoded `value`:
+Записи читаются пакетами, одновременно обрабатывается не более четырёх партиций. Raf не ждёт новых сообщений и не включает записи за зафиксированной верхней границей каждой партиции. Пустые партиции не добавляют записей в ответ.
 
-- A Kafka tombstone has `"tombstone": true` and `"value": null`. A zero-byte Protobuf message is decoded normally, usually as `{}`.
-- A missing key or header value is `null`; a present empty value is `""`. Binary keys that are not valid UTF-8 use `key_base64` with `key: null`. Binary header values use `value_base64` with `value: null` in the header entry.
-- If a message value cannot be decoded, that record contains `decode_error` and `value_base64`, while other records are still returned.
+Каждая партиция фиксирует границы независимо: результат не является атомарным снимком всего топика. Retention или compaction могут удалить записи во время запроса. Raf возвращает оставшиеся доступные записи либо ошибку чтения; после таймаута частичный результат не выдаётся как успешный ответ.
 
-Raw Protobuf bytes do not identify their message type. Choose the type that the consumer expects for the topic: a wrong but wire-compatible type can decode successfully with misleading or missing fields.
+Каждая запись содержит `partition`, `offset`, `time`, `key`, `headers` и декодированное `value`:
 
-## Timeouts and errors
+- Для tombstone возвращаются `"tombstone": true` и `"value": null`. Protobuf-сообщение из нуля байт декодируется обычным образом, как правило в `{}`.
+- Отсутствующий ключ или значение заголовка представляется как `null`, а существующее пустое значение — как `""`. Для ключа с некорректным UTF-8 используются `key_base64` и `key: null`. Для бинарного значения заголовка — `value_base64` и `value: null` внутри записи заголовка.
+- Если тело сообщения не удалось декодировать, запись содержит `decode_error` и `value_base64`. Остальные записи продолжают обрабатываться.
 
-An HTTP request waits at most 15 seconds for Kafka; cancellation stops that wait. Individual Kafka network operations have shorter deadlines. A broker timeout returns HTTP 504; other broker failures return HTTP 502. The producer may continue delivering a queued message after the HTTP request times out or is cancelled, so neither outcome establishes whether Kafka accepted the record. Inspect the topic before retrying if duplicates matter.
+Бинарный Protobuf не содержит имени своего типа. Выбирайте контракт, который ожидает потребитель этого топика: другой тип с совместимым бинарным представлением может успешно декодироваться, но дать неверный набор полей или потерять часть данных в JSON.
 
-The HTTP server allows 5 seconds for request headers, 15 seconds for reading a request, and 20 seconds for writing a response. On interruption or SIGTERM, active HTTP requests and Kafka shutdown share a 10-second grace period. If that expires, raf cancels request contexts, stops waiting for the producer, cancels background broker discovery, closes idle connections, and exits with an error. Active Kafka network requests retain their own deadlines; they do not keep the process from exiting.
+## Таймауты и ошибки
 
-`GET /healthz` returns HTTP 204 while the HTTP server is running. It is a liveness endpoint and does not verify Kafka availability.
+HTTP-запрос ожидает Kafka не более 15 секунд; отмена запроса прекращает ожидание. У отдельных сетевых операций Kafka более короткие таймауты. Таймаут брокера приводит к HTTP 504, другие ошибки брокера — к HTTP 502.
 
-The [Postman collection](postman/raf.postman_collection.json) includes `/types`, publish and read requests, and variants using configured topic types. Set `base_url` to `http://localhost:18080` for Compose or `http://localhost:8080` for the default local launch.
+Отправитель может продолжить доставку уже поставленного в очередь сообщения после таймаута или отмены HTTP-запроса. Поэтому такой исход не позволяет однозначно определить, приняла ли Kafka сообщение. Если дубликаты нежелательны, проверьте топик перед повторной отправкой.
 
-## Docker
+HTTP-сервер выделяет 5 секунд на заголовки запроса, 15 секунд на чтение запроса и 20 секунд на запись ответа. При прерывании или SIGTERM активные HTTP-запросы и закрытие Kafka-клиента получают общий срок в 10 секунд на завершение.
+
+По истечении этого срока raf отменяет контексты запросов, прекращает ожидание отправителя, останавливает фоновое обнаружение брокеров, закрывает неиспользуемые соединения и завершается с ошибкой. Уже выполняющиеся сетевые запросы Kafka сохраняют собственные таймауты и не задерживают выход из процесса.
+
+`GET /healthz` возвращает HTTP 204, пока HTTP-сервер работает. Эндпоинт проверяет работоспособность HTTP-сервера и не обращается к Kafka.
+
+В [коллекции Postman](postman/raf.postman_collection.json) есть запросы для просмотра типов и топиков, генерации примеров, публикации и чтения сообщений, в том числе с типами из конфигурации. Для Compose задайте `base_url=http://localhost:18080`, для стандартного локального запуска — `http://localhost:8080`.
+
+## Запуск в Docker
 
 ```sh
 docker build -t raf .
@@ -204,11 +222,11 @@ docker run --rm -p 127.0.0.1:8080:8080 \
   raf
 ```
 
-The broker's advertised address must be reachable from the container. Mount your own `.proto` directories when testing real topics. `raf` currently supports plaintext Kafka connections and raw Protobuf values; Schema Registry framing and broker authentication are not configured yet.
+Адрес, который брокер объявляет клиентам через advertised listeners, должен быть доступен из контейнера. Для тестирования своих топиков смонтируйте каталоги с нужными `.proto`-файлами.
 
-## Development checks
+Сейчас raf поддерживает подключения к Kafka без шифрования и бинарные значения Protobuf без дополнительного обрамления. Интеграция со Schema Registry и аутентификация на брокере пока не настроены.
 
-The [architecture guide](docs/architecture.md) describes the package structure, request flow, and application lifecycle in Russian.
+## Проверки при разработке
 
 ```sh
 go test -race -count=1 ./...
@@ -216,11 +234,11 @@ go vet ./...
 go build ./cmd/raf
 ```
 
-Kafka integration tests are skipped unless a dedicated test broker is configured. To run them against the Compose broker:
+Интеграционные тесты Kafka пропускаются, если тестовый брокер не указан. Для запуска с брокером из Compose:
 
 ```sh
 docker compose up -d --wait --wait-timeout 180 kafka
 RAF_TEST_KAFKA_BROKERS=localhost:19092 go test -race -count=1 ./...
 ```
 
-The integration tests create uniquely named `raf-test-...` topics and delete them afterward. [CI](.github/workflows/ci.yml) starts its own Kafka broker, runs the tests with the race detector and `go vet`, and builds the Go binary and Docker image.
+Тесты создают топики с уникальными именами `raf-test-...` и удаляют их после завершения. [CI](.github/workflows/ci.yml) запускает собственный брокер Kafka, выполняет тесты с детектором гонок и `go vet`, собирает бинарный файл Go и Docker-образ.
