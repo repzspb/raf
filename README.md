@@ -38,10 +38,58 @@ In GoLand, create a Go Build configuration for the **package** `./cmd/raf`, use 
 
 ## Configure contracts and topic types
 
+### YAML configuration
+
+Set `RAF_CONFIG_FILE` to load a configuration file. [examples/raf.yaml](examples/raf.yaml) is a working example with two Protobuf contracts:
+
+```sh
+RAF_CONFIG_FILE=./examples/raf.yaml go run ./cmd/raf
+```
+
+```yaml
+http:
+  address: ":8080"
+kafka:
+  brokers:
+    - localhost:19092
+protobuf:
+  import_paths:
+    - ./proto
+  files:
+    - event.proto
+    - project.proto
+topics:
+  example.events:
+    type: example.Event
+  example.projects:
+    type: example.ProjectChangeEvent
+```
+
+Configuration precedence is **defaults → file → nonempty environment variables**. Environment lists and `RAF_TOPIC_TYPES` replace the entire corresponding file value; `RAF_TOPIC_TYPES='{}'` clears all mappings. Empty environment variables do not override the file.
+
+Relative `protobuf.import_paths` entries are resolved from the configuration file's directory. When omitted, that directory is used. `protobuf.files` entries remain relative to the import directories. Paths supplied through `RAF_PROTO_IMPORT_PATHS` remain relative to the process working directory. Paths and values are literal; shell variables in YAML are not expanded.
+
+The file must contain one YAML mapping. Unknown fields, duplicate keys, null values, and non-string scalar values are rejected. The file is only loaded when explicitly selected; there is no automatic search for `raf.yaml`. Without `RAF_CONFIG_FILE`, the existing environment-only launch works as before. Restart raf to reload settings.
+
+In GoLand, set `RAF_CONFIG_FILE` to the file path and remove old environment overrides you no longer need. To use a file in Docker, mount the configuration and its contracts together, and override the broker address if necessary:
+
+```sh
+docker run --rm -p 127.0.0.1:8080:8080 \
+  -v "$PWD/examples:/config:ro" \
+  -e RAF_CONFIG_FILE=/config/raf.yaml \
+  -e RAF_KAFKA_BROKERS=host.docker.internal:19092 \
+  raf
+```
+
+The sample file configures two topic types but does not create topics. Compose's initializer creates only `example.events`; create `example.projects` separately before publishing to it. Root-level `raf.yaml` and `raf.yml` are ignored by Git and excluded from the Docker build context for local configuration.
+
+### Environment variables
+
 | Variable | Meaning | Default |
 | --- | --- | --- |
-| `RAF_KAFKA_BROKERS` | Comma-separated broker addresses | Required |
-| `RAF_PROTO_FILES` | Comma-separated root `.proto` file names | Required |
+| `RAF_CONFIG_FILE` | Path to a YAML configuration file | Not loaded |
+| `RAF_KAFKA_BROKERS` | Comma-separated broker addresses | Required unless provided in the file |
+| `RAF_PROTO_FILES` | Comma-separated root `.proto` file names | Required unless provided in the file |
 | `RAF_PROTO_IMPORT_PATHS` | Directories used to find root files and imports | `.` |
 | `RAF_TOPIC_TYPES` | JSON object mapping topic names to Protobuf message names | No mappings |
 | `RAF_HTTP_ADDR` | HTTP listen address | `:8080` |

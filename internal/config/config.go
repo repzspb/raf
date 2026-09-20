@@ -24,26 +24,16 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		HTTPAddr:         getenv("RAF_HTTP_ADDR", ":8080"),
-		KafkaBrokers:     split(os.Getenv("RAF_KAFKA_BROKERS"), ","),
-		ProtoFiles:       split(os.Getenv("RAF_PROTO_FILES"), ","),
-		ProtoImportPaths: filepath.SplitList(getenv("RAF_PROTO_IMPORT_PATHS", ".")),
+		HTTPAddr:         ":8080",
+		ProtoImportPaths: []string{"."},
 	}
-	for i, path := range cfg.ProtoImportPaths {
-		cfg.ProtoImportPaths[i] = strings.TrimSpace(path)
+	if path := os.Getenv("RAF_CONFIG_FILE"); path != "" {
+		if err := applyFile(&cfg, path); err != nil {
+			return Config{}, fmt.Errorf("RAF_CONFIG_FILE %q: %w", path, err)
+		}
 	}
-	if raw := os.Getenv("RAF_TOPIC_TYPES"); raw != "" {
-		var mappings map[string]*string
-		if err := json.Unmarshal([]byte(raw), &mappings); err != nil || mappings == nil {
-			return Config{}, fmt.Errorf("RAF_TOPIC_TYPES must be a JSON object mapping topics to protobuf message names")
-		}
-		cfg.TopicTypes = make(map[string]string, len(mappings))
-		for topic, messageType := range mappings {
-			if strings.TrimSpace(topic) == "" || messageType == nil || strings.TrimSpace(*messageType) == "" {
-				return Config{}, fmt.Errorf("RAF_TOPIC_TYPES requires non-empty topics and message names")
-			}
-			cfg.TopicTypes[topic] = strings.TrimSpace(*messageType)
-		}
+	if err := applyEnv(&cfg); err != nil {
+		return Config{}, err
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -51,10 +41,46 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+// applyEnv заменяет настройки только для непустых переменных окружения.
+func applyEnv(cfg *Config) error {
+	if raw := os.Getenv("RAF_HTTP_ADDR"); raw != "" {
+		cfg.HTTPAddr = raw
+	}
+	if raw := os.Getenv("RAF_KAFKA_BROKERS"); raw != "" {
+		cfg.KafkaBrokers = split(raw, ",")
+	}
+	if raw := os.Getenv("RAF_PROTO_FILES"); raw != "" {
+		cfg.ProtoFiles = split(raw, ",")
+	}
+	if raw := os.Getenv("RAF_PROTO_IMPORT_PATHS"); raw != "" {
+		cfg.ProtoImportPaths = filepath.SplitList(raw)
+	}
+	for i, path := range cfg.ProtoImportPaths {
+		cfg.ProtoImportPaths[i] = strings.TrimSpace(path)
+	}
+	if raw := os.Getenv("RAF_TOPIC_TYPES"); raw != "" {
+		var mappings map[string]*string
+		if err := json.Unmarshal([]byte(raw), &mappings); err != nil || mappings == nil {
+			return fmt.Errorf("RAF_TOPIC_TYPES must be a JSON object mapping topics to protobuf message names")
+		}
+		cfg.TopicTypes = make(map[string]string, len(mappings))
+		for topic, messageType := range mappings {
+			if strings.TrimSpace(topic) == "" || messageType == nil || strings.TrimSpace(*messageType) == "" {
+				return fmt.Errorf("RAF_TOPIC_TYPES requires non-empty topics and message names")
+			}
+			cfg.TopicTypes[topic] = strings.TrimSpace(*messageType)
+		}
+	}
+	return nil
+}
+
 // Validate проверяет настройки также при создании приложения без переменных окружения.
 func (c Config) Validate() error {
+	if strings.TrimSpace(c.HTTPAddr) == "" {
+		return fmt.Errorf("RAF_HTTP_ADDR / http.address must not be empty")
+	}
 	if len(c.KafkaBrokers) == 0 {
-		return fmt.Errorf("RAF_KAFKA_BROKERS is required")
+		return fmt.Errorf("RAF_KAFKA_BROKERS / kafka.brokers is required")
 	}
 	for _, broker := range c.KafkaBrokers {
 		if strings.TrimSpace(broker) == "" {
@@ -62,7 +88,7 @@ func (c Config) Validate() error {
 		}
 	}
 	if len(c.ProtoFiles) == 0 {
-		return fmt.Errorf("RAF_PROTO_FILES is required")
+		return fmt.Errorf("RAF_PROTO_FILES / protobuf.files is required")
 	}
 	for _, file := range c.ProtoFiles {
 		if strings.TrimSpace(file) == "" {
@@ -80,16 +106,6 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
-}
-
-func getenv(
-	name string,
-	fallback string,
-) string {
-	if value := os.Getenv(name); value != "" {
-		return value
-	}
-	return fallback
 }
 
 func split(

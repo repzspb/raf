@@ -1,7 +1,9 @@
 .idea/
 .DS_Store
 
-# Local configuration and build output.
+# Локальная конфигурация и результаты сборки.
+/raf.yaml
+/raf.yml
 .env
 .env.*
 !.env.example

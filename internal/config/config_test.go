@@ -12,6 +12,7 @@ import (
 
 func setRequiredEnv(t *testing.T) {
 	t.Helper()
+	t.Setenv("RAF_CONFIG_FILE", "")
 	t.Setenv("RAF_KAFKA_BROKERS", "localhost:9092")
 	t.Setenv("RAF_PROTO_FILES", "events.proto")
 	t.Setenv("RAF_HTTP_ADDR", "")

@@ -7,3 +7,5 @@
 *.out
 coverage.out
 /raf
+/raf.yaml
+/raf.yml

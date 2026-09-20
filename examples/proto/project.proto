@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package example;
+
+import "google/protobuf/timestamp.proto";
+
+// ProjectChangeEvent — демонстрационный контракт второго топика.
+message ProjectChangeEvent {
+  // id — идентификатор проекта.
+  string id = 1;
+  // name — название проекта.
+  string name = 2;
+  // changed_at — время изменения.
+  google.protobuf.Timestamp changed_at = 3;
+}

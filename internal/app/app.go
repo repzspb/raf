@@ -54,7 +54,7 @@ func New(
 	if err != nil {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		return nil, errors.Join(fmt.Errorf("RAF_TOPIC_TYPES %w", err), broker.Close(closeCtx))
+		return nil, errors.Join(fmt.Errorf("topic configuration (RAF_TOPIC_TYPES / topics): %w", err), broker.Close(closeCtx))
 	}
 	return &App{
 		logger: logger,

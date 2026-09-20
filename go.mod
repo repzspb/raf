@@ -5,6 +5,7 @@ go 1.24
 require (
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/segmentio/kafka-go v0.4.51
+	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sync v0.8.0
 	google.golang.org/protobuf v1.36.12
 )

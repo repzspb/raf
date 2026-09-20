@@ -1,0 +1,23 @@
+# Адрес HTTP-сервера raf.
+http:
+  address: ":8080"
+
+# Для Kafka из compose.yaml, доступной с хоста.
+kafka:
+  brokers:
+    - localhost:19092
+
+# Каталоги считаются от расположения этого файла.
+protobuf:
+  import_paths:
+    - ./proto
+  files:
+    - event.proto
+    - project.proto
+
+# Настройки контрактов не создают топики в Kafka.
+topics:
+  example.events:
+    type: example.Event
+  example.projects:
+    type: example.ProjectChangeEvent
