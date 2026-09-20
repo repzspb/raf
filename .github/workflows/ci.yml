@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: go.sum
+      - name: Check configuration
+        run: |
+          docker compose config --quiet
+          jq empty postman/raf.postman_collection.json
+      - name: Start test Kafka
+        run: docker compose up -d --wait --wait-timeout 180 kafka
+      - name: Test with race detector and Kafka integration
+        env:
+          RAF_TEST_KAFKA_BROKERS: localhost:19092
+        run: go test -race -count=1 ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build ./cmd/raf
+      - name: Build Docker image
+        run: docker compose build raf
+      - name: Kafka logs
+        if: failure()
+        run: docker compose logs kafka
+      - name: Stop test Kafka
+        if: always()
+        run: docker compose down --volumes
