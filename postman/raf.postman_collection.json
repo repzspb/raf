@@ -1,6 +1,7 @@
 {
   "info": {
     "name": "raf",
+    "description": "Publish ProtoJSON to Kafka and inspect recent Protobuf records. For Docker Compose, set base_url to http://localhost:18080. The type query parameter can be omitted when RAF_TOPIC_TYPES defines a default for the topic.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -11,6 +12,13 @@
   ],
   "item": [
     {
+      "name": "List loaded Protobuf types",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/types"
+      }
+    },
+    {
       "name": "Publish Protobuf message",
       "request": {
         "method": "POST",
@@ -20,6 +28,7 @@
         ],
         "body": {
           "mode": "raw",
+          "options": { "raw": { "language": "json" } },
           "raw": "{\n  \"id\": \"example-1\",\n  \"status\": \"CREATED\"\n}"
         },
         "url": "{{base_url}}/topics/{{topic}}/messages?type={{message_type}}&key={{message_key}}"
@@ -30,6 +39,30 @@
       "request": {
         "method": "GET",
         "url": "{{base_url}}/topics/{{topic}}/messages?type={{message_type}}&limit=10"
+      }
+    },
+    {
+      "name": "Publish using configured topic type",
+      "request": {
+        "description": "Requires an entry for this topic in RAF_TOPIC_TYPES. The Compose example configures example.events as example.Event.",
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"id\": \"example-1\",\n  \"status\": \"CREATED\"\n}"
+        },
+        "url": "{{base_url}}/topics/{{topic}}/messages?key={{message_key}}"
+      }
+    },
+    {
+      "name": "Inspect using configured topic type",
+      "request": {
+        "description": "Requires an entry for this topic in RAF_TOPIC_TYPES.",
+        "method": "GET",
+        "url": "{{base_url}}/topics/{{topic}}/messages?limit=10"
       }
     }
   ]

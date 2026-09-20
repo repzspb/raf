@@ -18,9 +18,9 @@ const maxBodyBytes = 1 << 20
 
 func (s *Server) publish(w http.ResponseWriter, r *http.Request) {
 	topic := r.PathValue("topic")
-	messageType := r.URL.Query().Get("type")
-	if messageType == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("query parameter type is required"))
+	messageType, err := s.messageType(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -53,7 +53,7 @@ func (s *Server) publish(w http.ResponseWriter, r *http.Request) {
 	message, err := s.broker.Publish(ctx, topic, r.URL.Query().Get("key"), headers, encoded)
 	if err != nil {
 		s.logger.Error("publish failed", "topic", topic, "error", err)
-		writeError(w, http.StatusBadGateway, err)
+		writeBrokerError(w, err)
 		return
 	}
 	s.logger.Info("message published", "topic", topic, "partition", message.Partition, "offset", message.Offset)
@@ -66,7 +66,7 @@ func requestHeaders(raw string) ([]kafkago.Header, error) {
 	if raw == "" {
 		return nil, nil
 	}
-	var values map[string]string
+	var values map[string]*string
 	if err := json.Unmarshal([]byte(raw), &values); err != nil || values == nil {
 		return nil, fmt.Errorf("X-Raf-Headers must be a JSON object of string values")
 	}
@@ -77,7 +77,10 @@ func requestHeaders(raw string) ([]kafkago.Header, error) {
 	sort.Strings(names)
 	headers := make([]kafkago.Header, 0, len(names))
 	for _, name := range names {
-		headers = append(headers, kafkago.Header{Key: name, Value: []byte(values[name])})
+		if values[name] == nil {
+			return nil, fmt.Errorf("X-Raf-Headers must be a JSON object of string values")
+		}
+		headers = append(headers, kafkago.Header{Key: name, Value: []byte(*values[name])})
 	}
 	return headers, nil
 }

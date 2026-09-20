@@ -15,25 +15,24 @@ type record struct {
 	Partition   int             `json:"partition"`
 	Offset      int64           `json:"offset"`
 	Time        time.Time       `json:"time"`
-	Key         string          `json:"key"`
+	Key         *string         `json:"key"`
+	KeyBase64   string          `json:"key_base64,omitempty"`
 	Headers     []header        `json:"headers"`
 	Value       json.RawMessage `json:"value,omitempty"`
 	ValueBase64 string          `json:"value_base64,omitempty"`
 	DecodeError string          `json:"decode_error,omitempty"`
+	Tombstone   bool            `json:"tombstone,omitempty"`
 }
 
 type header struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name        string  `json:"name"`
+	Value       *string `json:"value"`
+	ValueBase64 string  `json:"value_base64,omitempty"`
 }
 
 func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
-	messageType := r.URL.Query().Get("type")
-	if messageType == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("query parameter type is required"))
-		return
-	}
-	if err := s.codec.ValidateType(messageType); err != nil {
+	messageType, err := s.messageType(r)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -52,31 +51,48 @@ func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
 	messages, err := s.broker.Recent(ctx, topic, limit)
 	if err != nil {
 		s.logger.Error("read failed", "topic", topic, "error", err)
-		writeError(w, http.StatusBadGateway, err)
+		writeBrokerError(w, err)
 		return
 	}
 	records := make([]record, 0, len(messages))
 	for _, message := range messages {
-		value, err := s.codec.Decode(messageType, message.Value)
 		rec := record{
 			Partition: message.Partition,
 			Offset:    message.Offset,
 			Time:      message.Time,
-			Key:       string(message.Key),
 			Headers:   make([]header, 0, len(message.Headers)),
 		}
-		for _, h := range message.Headers {
-			value := string(h.Value)
-			if !utf8.Valid(h.Value) {
-				value = "base64:" + base64.StdEncoding.EncodeToString(h.Value)
+		if message.Key != nil {
+			if utf8.Valid(message.Key) {
+				key := string(message.Key)
+				rec.Key = &key
+			} else {
+				rec.KeyBase64 = base64.StdEncoding.EncodeToString(message.Key)
 			}
-			rec.Headers = append(rec.Headers, header{Name: h.Key, Value: value})
 		}
-		if err != nil {
-			rec.DecodeError = err.Error()
-			rec.ValueBase64 = base64.StdEncoding.EncodeToString(message.Value)
+		for _, h := range message.Headers {
+			entry := header{Name: h.Key}
+			if h.Value != nil {
+				if utf8.Valid(h.Value) {
+					value := string(h.Value)
+					entry.Value = &value
+				} else {
+					entry.ValueBase64 = base64.StdEncoding.EncodeToString(h.Value)
+				}
+			}
+			rec.Headers = append(rec.Headers, entry)
+		}
+		if message.Value == nil {
+			rec.Tombstone = true
+			rec.Value = json.RawMessage("null")
 		} else {
-			rec.Value = value
+			value, err := s.codec.Decode(messageType, message.Value)
+			if err != nil {
+				rec.DecodeError = err.Error()
+				rec.ValueBase64 = base64.StdEncoding.EncodeToString(message.Value)
+			} else {
+				rec.Value = value
+			}
 		}
 		records = append(records, rec)
 	}

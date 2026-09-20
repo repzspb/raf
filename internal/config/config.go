@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ type Config struct {
 	KafkaBrokers     []string
 	ProtoFiles       []string
 	ProtoImportPaths []string
+	TopicTypes       map[string]string
 }
 
 func Load() (Config, error) {
@@ -26,6 +28,25 @@ func Load() (Config, error) {
 	}
 	if len(cfg.ProtoFiles) == 0 {
 		return Config{}, fmt.Errorf("RAF_PROTO_FILES is required")
+	}
+	for i, path := range cfg.ProtoImportPaths {
+		cfg.ProtoImportPaths[i] = strings.TrimSpace(path)
+		if cfg.ProtoImportPaths[i] == "" {
+			return Config{}, fmt.Errorf("RAF_PROTO_IMPORT_PATHS contains an empty directory")
+		}
+	}
+	if raw := os.Getenv("RAF_TOPIC_TYPES"); raw != "" {
+		var mappings map[string]*string
+		if err := json.Unmarshal([]byte(raw), &mappings); err != nil || mappings == nil {
+			return Config{}, fmt.Errorf("RAF_TOPIC_TYPES must be a JSON object mapping topics to protobuf message names")
+		}
+		cfg.TopicTypes = make(map[string]string, len(mappings))
+		for topic, messageType := range mappings {
+			if strings.TrimSpace(topic) == "" || messageType == nil || strings.TrimSpace(*messageType) == "" {
+				return Config{}, fmt.Errorf("RAF_TOPIC_TYPES requires non-empty topics and message names")
+			}
+			cfg.TopicTypes[topic] = strings.TrimSpace(*messageType)
+		}
 	}
 	return cfg, nil
 }
